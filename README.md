@@ -5,21 +5,25 @@ OpenBB Workspace connector for querying CSV, Parquet, and SQLite files with Duck
 ## Install
 
 ```bash
-uv tool install git+ssh://git@github.com/piiq/openbb-duck.git
+uv tool install git+https://github.com/piiq/openbb-duck.git
 ```
 
 ## Run
+
+Run `openbb-duck` in a folder with files. All supported files will be accessible in the widget.
+
+or
+
+Specify the parameters explicitly:
 
 ```bash
 openbb-duck --data-dir /path/to/files --host 127.0.0.1 --port 7779
 ```
 
-If `--data-dir` is omitted, the backend uses the current working directory.
-Pass `--cors-origin` multiple times to replace the default OpenBB Workspace CORS
-allowlist.
+Pass `--cors-origin` multiple times to replace the default OpenBB Workspace CORS allowlist.
 
-CLI options can also be configured with environment variables. Priority is CLI
-argument, then environment variable, then default.
+CLI options can also be configured with environment variables.
+Priority is CLI argument, then environment variable, then default.
 
 | CLI option | Environment variable |
 | --- | --- |

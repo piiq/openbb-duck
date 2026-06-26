@@ -1,6 +1,5 @@
-<p align="center">
-  <img width="960" height="320" alt="f98afd68c52f9a7c8d1a1587f143b55de51dba729e0ef047149b539a6765ce19" src="https://github.com/user-attachments/assets/aaa91b16-9b47-44dd-a9b5-2ae1da4ae12b" />
-</p>
+<p align="center"><img width="960" alt="a9f56e702d2e8741f99ff599f72c3477975c5748fbc84d0668647c55b83629dd" src="https://github.com/user-attachments/assets/5ede5181-ce42-4f8a-9f5c-1896b9189463" /></p>
+
 
 # OpenBB Duck
 

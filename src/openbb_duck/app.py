@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from fastapi import Body, FastAPI
@@ -12,6 +13,12 @@ from openbb_duck.discovery import (
     table_schemas,
 )
 from openbb_duck.query import execute_ssrm_query
+
+DEFAULT_CORS_ORIGINS = (
+    "https://pro.openbb.co",
+    "https://pro.openbb.dev",
+    "http://localhost:1420",
+)
 
 
 def default_query(data_dir: Path) -> str:
@@ -75,7 +82,10 @@ def apps_json() -> list[dict]:
     ]
 
 
-def create_app(data_dir: str | Path | None = None) -> FastAPI:
+def create_app(
+    data_dir: str | Path | None = None,
+    cors_origins: Sequence[str] | None = None,
+) -> FastAPI:
     resolved_data_dir = Path(data_dir or Path.cwd()).expanduser().resolve()
     app = FastAPI(
         title="OpenBB Duck",
@@ -85,11 +95,9 @@ def create_app(data_dir: str | Path | None = None) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "https://pro.openbb.co",
-            "https://pro.openbb.dev",
-            "http://localhost:1420",
-        ],
+        allow_origins=list(
+            DEFAULT_CORS_ORIGINS if cors_origins is None else cors_origins
+        ),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

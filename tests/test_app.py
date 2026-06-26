@@ -125,3 +125,23 @@ def test_query_endpoint_rejects_mutating_sql(tmp_path):
 
     assert response.status_code == 400
     assert "read-only" in response.json()["detail"].lower()
+
+
+def test_create_app_accepts_custom_cors_origins(tmp_path):
+    client = TestClient(
+        create_app(tmp_path, cors_origins=["https://workspace.example.com"])
+    )
+
+    response = client.options(
+        "/widgets.json",
+        headers={
+            "Origin": "https://workspace.example.com",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "https://workspace.example.com"
+    )

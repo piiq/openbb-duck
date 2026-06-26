@@ -1,0 +1,79 @@
+[project]
+name = "openbb-duck"
+version = "0.1.0"
+description = "OpenBB Workspace backend for querying local files with DuckDB"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+  "duckdb>=1.5.4",
+  "fastapi>=0.138.1",
+  "uvicorn>=0.49.0",
+]
+
+[project.scripts]
+openbb-duck = "openbb_duck.cli:main"
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.1",
+  "pytest>=9.1.1",
+  "ruff>=0.15.20",
+  "ty>=0.0.54",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openbb_duck"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.ruff]
+# Python version target
+target-version = "py313"
+
+# Line length (matches editorconfig)
+line-length = 88
+
+# Files to exclude
+exclude = [
+  ".venv",
+  "__pycache__",
+  "*.egg-info",
+  "build",
+  "dist",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle errors
+  "W",  # pycodestyle warnings
+  "F",  # pyflakes
+  "I",  # isort (import sorting)
+  "D",  # pydocstyle (docstrings)
+  "UP",  # pyupgrade (modern syntax)
+]
+
+# Ignore specific rules
+ignore = [
+  "D203",  # one-blank-line-before-class (conflicts with D211)
+  "D213",  # multi-line-summary-second-line (conflicts with D212)
+  "D100",  # module level docstrings are not mandatory
+  "D101",  # class level docstrings are not mandatory
+  "D102",  # method level docstrings are not mandatory
+  "D103",  # function level docstrings are not mandatory
+  "D107",  # __init__ docstrings are not mandatory
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Don't require docstrings in test files
+"tests/**/*.py" = ["D"]
+# Don't require docstrings in __init__.py files
+"__init__.py" = ["D104"]

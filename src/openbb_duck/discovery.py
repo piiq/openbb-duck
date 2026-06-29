@@ -11,6 +11,7 @@ import duckdb
 FILE_EXTENSIONS = {".csv", ".tsv", ".parquet", ".pq", ".sqlite", ".sqlite3", ".db"}
 SQLITE_EXTENSIONS = {".sqlite", ".sqlite3", ".db"}
 PARQUET_EXTENSIONS = {".parquet", ".pq"}
+INFORMATION_SCHEMA_TABLES = ("columns", "tables", "schemata", "views")
 
 
 @dataclass(frozen=True)
@@ -179,8 +180,15 @@ def column_schema(
     connection: duckdb.DuckDBPyConnection,
     table_name: str,
 ) -> list[dict[str, Any]]:
+    return relation_column_schema(connection, quote_identifier(table_name))
+
+
+def relation_column_schema(
+    connection: duckdb.DuckDBPyConnection,
+    relation_sql: str,
+) -> list[dict[str, Any]]:
     rows = connection.execute(
-        f"DESCRIBE SELECT * FROM {quote_identifier(table_name)} LIMIT 0"
+        f"DESCRIBE SELECT * FROM {relation_sql} LIMIT 0"
     ).fetchall()
     columns: list[dict[str, Any]] = []
     for row in rows:
@@ -199,6 +207,32 @@ def column_schema(
             }
         )
     return columns
+
+
+def information_schema_schemas(
+    connection: duckdb.DuckDBPyConnection,
+) -> dict[str, dict[str, Any]]:
+    schemas: dict[str, dict[str, Any]] = {}
+    database = "memory"
+    schema = "information_schema"
+
+    for table_name in INFORMATION_SCHEMA_TABLES:
+        columns = relation_column_schema(
+            connection,
+            f"{quote_identifier(schema)}.{quote_identifier(table_name)}",
+        )
+        table_schema = {
+            "database": database,
+            "schema": schema,
+            "tableName": table_name,
+            "kind": "VIEW",
+            "columns": columns,
+            "column_count": len(columns),
+        }
+        schemas[f"{schema}.{table_name}"] = table_schema
+        schemas[f"{database}.{schema}.{table_name}"] = table_schema
+
+    return schemas
 
 
 def table_schemas(data_dir: Path) -> dict[str, dict[str, Any]]:
@@ -224,6 +258,7 @@ def table_schemas(data_dir: Path) -> dict[str, dict[str, Any]]:
             }
             schemas[ref.name] = alias_schema
             schemas[namespace.full_name(ref.name)] = qualified_schema
+        schemas.update(information_schema_schemas(connection))
         return schemas
     finally:
         connection.close()

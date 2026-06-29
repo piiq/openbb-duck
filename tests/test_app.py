@@ -73,6 +73,27 @@ def test_table_schemas_include_csv_and_sqlite_tables(tmp_path):
     ]
 
 
+def test_table_schemas_include_duckdb_information_schema(tmp_path):
+    write_csv(tmp_path / "prices.csv")
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/table-schemas")
+
+    assert response.status_code == 200
+    schemas = response.json()
+    assert "information_schema.columns" in schemas
+    assert "information_schema.tables" in schemas
+    assert "information_schema.schemata" in schemas
+    columns_schema = schemas["information_schema.columns"]
+    assert columns_schema["database"] == "memory"
+    assert columns_schema["schema"] == "information_schema"
+    assert columns_schema["tableName"] == "columns"
+    assert columns_schema["kind"] == "VIEW"
+    assert {"column_name", "table_name", "table_schema"}.issubset(
+        {column["name"] for column in columns_schema["columns"]}
+    )
+
+
 def test_query_endpoint_accepts_schema_qualified_file_views(tmp_path):
     write_csv(tmp_path / "prices.csv")
     client = TestClient(create_app(tmp_path))

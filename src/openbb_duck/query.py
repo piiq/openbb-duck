@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -14,6 +13,7 @@ READ_ONLY_PREFIXES = ("select", "with")
 
 
 def normalize_read_only_query(query: str) -> str:
+    """Accept only one SELECT/WITH statement before embedding it for SSRM."""
     stripped = query.strip().rstrip(";").strip()
     if not stripped:
         raise HTTPException(status_code=400, detail="Query is required")
@@ -31,6 +31,7 @@ def normalize_read_only_query(query: str) -> str:
 
 
 def sql_literal(value: Any) -> str:
+    """Render SSRM filter values into simple DuckDB SQL literals."""
     if value is None:
         return "NULL"
     if isinstance(value, bool):
@@ -41,6 +42,7 @@ def sql_literal(value: Any) -> str:
 
 
 def build_filter(field: str, config: dict[str, Any]) -> str | None:
+    """Translate one AG Grid SSRM filter config into a DuckDB WHERE predicate."""
     filter_type = config.get("filterType", "text")
     condition = config.get("type", "contains")
     column = quote_identifier(field)
@@ -104,6 +106,7 @@ def build_filter(field: str, config: dict[str, Any]) -> str | None:
 
 
 def build_where(filters: dict[str, Any] | None) -> str:
+    """Join SSRM filters for the wrapper query that paginates Terminal Pro results."""
     clauses = [
         clause
         for field, config in (filters or {}).items()
@@ -113,6 +116,7 @@ def build_where(filters: dict[str, Any] | None) -> str:
 
 
 def build_order(sort_model: list[dict[str, Any]] | None) -> str:
+    """Translate AG Grid sort model entries into an ORDER BY clause."""
     parts: list[str] = []
     for item in sort_model or []:
         field = item.get("colId")
@@ -126,6 +130,7 @@ def build_order(sort_model: list[dict[str, Any]] | None) -> str:
 
 
 def serialize_value(value: Any) -> Any:
+    """Convert DuckDB values into JSON-safe values for FastAPI responses."""
     if isinstance(value, Decimal):
         return int(value) if value == value.to_integral_value() else float(value)
     if isinstance(value, datetime | date):
@@ -134,6 +139,7 @@ def serialize_value(value: Any) -> Any:
 
 
 def rows_from_cursor(cursor: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
+    """Return cursor rows as dictionaries because SSRM expects row objects."""
     columns = [column[0] for column in cursor.description or []]
     return [
         {column: serialize_value(value) for column, value in zip(columns, row)}
@@ -141,7 +147,8 @@ def rows_from_cursor(cursor: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     ]
 
 
-def execute_ssrm_query(data_dir: Path, request: dict[str, Any]) -> dict[str, Any]:
+def execute_ssrm_query(sources: list[str], request: dict[str, Any]) -> dict[str, Any]:
+    """Run a read-only user query after registering configured sources."""
     query = normalize_read_only_query(request.get("query", "SELECT 1"))
     start = int(request.get("startRow") or 0)
     end = int(request.get("endRow") or start + 500)
@@ -162,7 +169,7 @@ def execute_ssrm_query(data_dir: Path, request: dict[str, Any]) -> dict[str, Any
 
     connection = duckdb.connect(database=":memory:")
     try:
-        configure_connection(connection, data_dir)
+        configure_connection(connection, sources)
         count_row = connection.execute(count_sql).fetchone()
         if count_row is None:
             raise HTTPException(status_code=500, detail="Count query returned no rows")

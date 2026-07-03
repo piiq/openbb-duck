@@ -1,120 +1,98 @@
-from pathlib import Path
+import pytest
 
 from openbb_duck.cli import build_parser, resolve_config
 
 
-def test_cli_defaults_to_current_working_directory(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
+def test_cli_requires_at_least_one_source():
+    args = build_parser().parse_args([])
 
-    config = resolve_config(build_parser().parse_args([]), {})
-
-    assert config.data_dir == Path.cwd()
-    assert config.host == "127.0.0.1"
-    assert config.port == 7779
-    assert config.reload is False
-    assert config.cors_origins is None
+    with pytest.raises(ValueError, match="at least one --source"):
+        resolve_config(args, {})
 
 
-def test_cli_args_override_defaults(tmp_path):
+def test_cli_accepts_repeated_sources():
     config = resolve_config(
         build_parser().parse_args(
             [
-                "--data-dir",
-                str(tmp_path),
-                "--host",
-                "0.0.0.0",
-                "--port",
-                "7788",
-                "--reload",
+                "--source",
+                "prices=./prices.parquet",
+                "-s",
+                "duck=duckdb:./warehouse.db",
             ]
         ),
         {},
     )
 
-    assert config.data_dir == tmp_path
-    assert config.host == "0.0.0.0"
-    assert config.port == 7788
-    assert config.reload is True
+    assert config.sources == ["prices=./prices.parquet", "duck=duckdb:./warehouse.db"]
 
 
-def test_env_vars_override_defaults(tmp_path):
+def test_env_vars_override_source_defaults():
     config = resolve_config(
         build_parser().parse_args([]),
-        {
-            "OPENBB_DUCK_DATA_DIR": str(tmp_path),
-            "OPENBB_DUCK_HOST": "0.0.0.0",
-            "OPENBB_DUCK_PORT": "7788",
-            "OPENBB_DUCK_RELOAD": "true",
-            "OPENBB_DUCK_CORS_ORIGINS": (
-                "https://workspace.example.com,http://localhost:3000"
-            ),
-        },
+        {"OPENBB_DUCK_SOURCES": "prices=./prices.parquet,duck=duckdb:./warehouse.db"},
     )
 
-    assert config.data_dir == tmp_path
-    assert config.host == "0.0.0.0"
-    assert config.port == 7788
-    assert config.reload is True
-    assert config.cors_origins == [
-        "https://workspace.example.com",
-        "http://localhost:3000",
-    ]
+    assert config.sources == ["prices=./prices.parquet", "duck=duckdb:./warehouse.db"]
 
 
-def test_cli_args_override_env_vars(tmp_path):
-    cli_data_dir = tmp_path / "cli"
-    env_data_dir = tmp_path / "env"
+def test_cli_args_override_source_env_vars():
     config = resolve_config(
-        build_parser().parse_args(
-            [
-                "--data-dir",
-                str(cli_data_dir),
-                "--host",
-                "127.0.0.2",
-                "--port",
-                "8888",
-                "--no-reload",
-                "--cors-origin",
-                "https://cli.example.com",
-            ]
-        ),
-        {
-            "OPENBB_DUCK_DATA_DIR": str(env_data_dir),
-            "OPENBB_DUCK_HOST": "0.0.0.0",
-            "OPENBB_DUCK_PORT": "7777",
-            "OPENBB_DUCK_RELOAD": "true",
-            "OPENBB_DUCK_CORS_ORIGINS": "https://env.example.com",
-        },
+        build_parser().parse_args(["--source", "cli=./cli.parquet"]),
+        {"OPENBB_DUCK_SOURCES": "env=./env.parquet"},
     )
 
-    assert config.data_dir == cli_data_dir
-    assert config.host == "127.0.0.2"
-    assert config.port == 8888
-    assert config.reload is False
-    assert config.cors_origins == ["https://cli.example.com"]
+    assert config.sources == ["cli=./cli.parquet"]
 
 
-def test_cli_parser_accepts_data_dir_host_and_port(tmp_path):
-    args = build_parser().parse_args(
-        ["--data-dir", str(tmp_path), "--host", "0.0.0.0", "--port", "7788"]
-    )
+def test_cli_rejects_ambiguous_db_source():
+    args = build_parser().parse_args(["--source", "./warehouse.db"])
 
-    assert args.data_dir == tmp_path
-    assert args.host == "0.0.0.0"
-    assert args.port == 7788
+    with pytest.raises(ValueError, match="ambiguous source"):
+        resolve_config(args, {})
 
 
-def test_cli_accepts_custom_cors_origins():
+def test_cli_rejects_duplicate_source_aliases():
     args = build_parser().parse_args(
         [
-            "--cors-origin",
-            "https://workspace.example.com",
-            "-c",
-            "http://localhost:3000",
+            "--source",
+            "warehouse=./warehouse.duckdb",
+            "--source",
+            "warehouse=./other.duckdb",
         ]
     )
 
-    assert args.cors_origins == [
-        "https://workspace.example.com",
-        "http://localhost:3000",
-    ]
+    with pytest.raises(ValueError, match="duplicate source alias"):
+        resolve_config(args, {})
+
+
+def test_cli_retains_server_and_cors_config():
+    config = resolve_config(
+        build_parser().parse_args(
+            [
+                "--source",
+                "./prices.parquet",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "7788",
+                "--reload",
+                "--cors-origin",
+                "https://workspace.example.com",
+            ]
+        ),
+        {},
+    )
+
+    assert config.host == "0.0.0.0"
+    assert config.port == 7788
+    assert config.reload is True
+    assert config.cors_origins == ["https://workspace.example.com"]
+
+
+def test_cli_help_explains_source_usage():
+    help_text = build_parser().format_help()
+
+    assert "--source" in help_text
+    assert "alias=source" in help_text
+    assert "duckdb:./warehouse.db" in help_text
+    assert "s3://bucket/path/**/*.parquet" in help_text

@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from pathlib import Path
-
 from fastapi import Body, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from openbb_duck.discovery import (
-    discover_tables,
     quote_identifier,
-    schema_ref,
     table_schemas,
 )
 from openbb_duck.query import execute_ssrm_query
@@ -21,20 +16,23 @@ DEFAULT_CORS_ORIGINS = (
 )
 
 
-def default_query(data_dir: Path) -> str:
-    refs = discover_tables(data_dir)
-    if not refs:
-        return "SELECT 1 AS value"
+def default_query(sources: list[str]) -> str:
+    """Build the widget's initial query from registered non-system sources."""
+    for schema in table_schemas(sources).values():
+        if schema["schema"] == "information_schema":
+            continue
+        if schema["database"] == "memory" and schema["schema"] == "main":
+            return f"SELECT * FROM {quote_identifier(schema['tableName'])} LIMIT 100"
+        return (
+            f"SELECT * FROM {quote_identifier(schema['database'])}."
+            f"{quote_identifier(schema['schema'])}."
+            f"{quote_identifier(schema['tableName'])} LIMIT 100"
+        )
+    raise ValueError("at least one queryable --source is required")
 
-    namespace = schema_ref(data_dir)
-    first_table = refs[0].name
-    return (
-        f"SELECT * FROM {quote_identifier(namespace.schema)}."
-        f"{quote_identifier(first_table)} LIMIT 100"
-    )
 
-
-def widgets_json(data_dir: Path) -> dict:
+def widgets_json(sources: list[str]) -> dict:
+    """Return the single SQL widget Terminal Pro loads from /widgets.json."""
     return {
         "duck_sql": {
             "name": "DuckDB SQL",
@@ -51,7 +49,7 @@ def widgets_json(data_dir: Path) -> dict:
                     "label": "SQL Query",
                     "show": False,
                     "language": "sql",
-                    "value": default_query(data_dir),
+                    "value": default_query(sources),
                 }
             ],
             "data": {"table": {"chartView": {"chartType": "column"}}},
@@ -60,33 +58,10 @@ def widgets_json(data_dir: Path) -> dict:
     }
 
 
-def apps_json() -> list[dict]:
-    return [
-        {
-            "name": "OpenBB Duck",
-            "description": "Query local files with DuckDB.",
-            "img": "",
-            "img_dark": "",
-            "img_light": "",
-            "allowCustomization": True,
-            "tabs": {
-                "": {
-                    "id": "",
-                    "name": "",
-                    "layout": [{"i": "duck_sql", "x": 0, "y": 0, "w": 40, "h": 15}],
-                }
-            },
-            "groups": [],
-            "prompts": [],
-        }
-    ]
-
-
 def create_app(
-    data_dir: str | Path | None = None,
-    cors_origins: Sequence[str] | None = None,
+    sources: list[str],
+    cors_origins: list[str] | None = None,
 ) -> FastAPI:
-    resolved_data_dir = Path(data_dir or Path.cwd()).expanduser().resolve()
     app = FastAPI(
         title="OpenBB Duck",
         description="OpenBB Workspace backend for local DuckDB analytics.",
@@ -104,20 +79,40 @@ def create_app(
     )
 
     @app.get("/")
-    def root() -> dict[str, str]:
-        return {"name": "OpenBB Duck", "data_dir": str(resolved_data_dir)}
+    def root() -> dict[str, list[str] | str]:
+        return {"name": "OpenBB Duck", "sources": sources}
 
     @app.get("/widgets.json")
     def get_widgets() -> dict:
-        return widgets_json(resolved_data_dir)
+        return widgets_json(sources)
 
     @app.get("/apps.json")
     def get_apps() -> list[dict]:
-        return apps_json()
+        return [
+            {
+                "name": "OpenBB Duck",
+                "description": "Query local files with DuckDB.",
+                "img": "",
+                "img_dark": "",
+                "img_light": "",
+                "allowCustomization": True,
+                "tabs": {
+                    "": {
+                        "id": "",
+                        "name": "",
+                        "layout": [
+                            {"i": "duck_sql", "x": 0, "y": 0, "w": 40, "h": 15}
+                        ],
+                    }
+                },
+                "groups": [],
+                "prompts": [],
+            }
+        ]
 
     @app.get("/table-schemas")
     def get_table_schemas() -> dict:
-        return table_schemas(resolved_data_dir)
+        return table_schemas(sources)
 
     @app.get("/semantic-views")
     def get_semantic_views() -> dict:
@@ -125,6 +120,6 @@ def create_app(
 
     @app.post("/query")
     def query(body: dict = Body(default_factory=dict)) -> dict:
-        return execute_ssrm_query(resolved_data_dir, body)
+        return execute_ssrm_query(sources, body)
 
     return app

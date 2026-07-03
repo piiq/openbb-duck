@@ -31,6 +31,9 @@ packages = ["src/openbb_duck"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+  "e2e: optional end-to-end tests that create temporary database assets",
+]
 
 [tool.ruff]
 # Python version target

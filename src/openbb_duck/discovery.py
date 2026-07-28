@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -10,6 +11,15 @@ import duckdb
 PARQUET_SUFFIXES = (".parquet", ".pq")
 CSV_SUFFIXES = (".csv", ".tsv")
 INFORMATION_SCHEMA_TABLES = ("columns", "tables", "schemata", "views")
+
+
+@dataclass(frozen=True)
+class ObjectStorageConfig:
+    endpoint: str
+    access_key_id: str
+    secret_access_key: str
+    region: str = "auto"
+    url_style: str = "path"
 
 
 def quote_identifier(value: str) -> str:
@@ -43,11 +53,41 @@ def safe_name(value: str) -> str:
 def configure_connection(
     connection: duckdb.DuckDBPyConnection,
     sources: list[str],
+    quack_token: str | None = None,
+    object_storage: ObjectStorageConfig | None = None,
 ) -> None:
     """Register every explicit source on a fresh per-request DuckDB connection."""
+    if object_storage is not None:
+        connection.execute("INSTALL httpfs")
+        connection.execute("LOAD httpfs")
+        connection.execute(
+            "CREATE OR REPLACE SECRET openbb_duck_s3 "
+            f"(TYPE s3, KEY_ID {quote_literal(object_storage.access_key_id)}, "
+            f"SECRET {quote_literal(object_storage.secret_access_key)}, "
+            f"REGION {quote_literal(object_storage.region)}, "
+            f"ENDPOINT {quote_literal(object_storage.endpoint)}, "
+            f"URL_STYLE {quote_literal(object_storage.url_style)})"
+        )
+
     aliases: set[str] = set()
+    quack_loaded = False
     for alias, target, kind in source_specs(sources):
         aliases.add(alias)
+
+        if kind == "quack":
+            if not quack_loaded:
+                connection.execute("INSTALL quack")
+                connection.execute("LOAD quack")
+                if quack_token:
+                    connection.execute(
+                        "CREATE OR REPLACE SECRET openbb_duck_quack "
+                        f"(TYPE quack, TOKEN {quote_literal(quack_token)})"
+                    )
+                quack_loaded = True
+            connection.execute(
+                f"ATTACH {quote_literal(target)} AS {quote_identifier(alias)}"
+            )
+            continue
 
         if kind == "duckdb":
             path = target.removeprefix("duckdb:")
@@ -144,6 +184,8 @@ def source_kind(target: str) -> str:
         return "sqlite"
     if target.startswith("ducklake:"):
         return "ducklake"
+    if target.startswith("quack:"):
+        return "quack"
     if lower_target.endswith(".duckdb"):
         return "duckdb"
     if lower_target.endswith((".sqlite", ".sqlite3")):
@@ -166,6 +208,10 @@ def alias_from_target(target: str, kind: str) -> str:
         return Path(path).stem
     if kind == "ducklake":
         return Path(target.removeprefix("ducklake:")).stem or "ducklake"
+    if kind == "quack":
+        parsed = urlparse(target)
+        compact = (parsed.path or parsed.netloc or "quack").strip("/")
+        return Path(compact).stem or "quack"
 
     parsed = urlparse(target)
     path = parsed.path if parsed.scheme else target
@@ -181,11 +227,20 @@ def target_without_query(target: str) -> str:
     return target.split("?", 1)[0]
 
 
-def table_schemas(sources: list[str]) -> dict[str, dict[str, Any]]:
+def table_schemas(
+    sources: list[str],
+    quack_token: str | None = None,
+    object_storage: ObjectStorageConfig | None = None,
+) -> dict[str, dict[str, Any]]:
     """Expose autocomplete metadata from DuckDB after all sources are registered."""
     connection = duckdb.connect(database=":memory:")
     try:
-        configure_connection(connection, sources)
+        configure_connection(
+            connection,
+            sources,
+            quack_token=quack_token,
+            object_storage=object_storage,
+        )
         rows = connection.execute(
             "SELECT table_catalog, table_schema, table_name, table_type "
             "FROM information_schema.tables "

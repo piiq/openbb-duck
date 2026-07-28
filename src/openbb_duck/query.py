@@ -7,7 +7,11 @@ from typing import Any
 import duckdb
 from fastapi import HTTPException
 
-from openbb_duck.discovery import configure_connection, quote_identifier
+from openbb_duck.discovery import (
+    ObjectStorageConfig,
+    configure_connection,
+    quote_identifier,
+)
 
 READ_ONLY_PREFIXES = ("select", "with")
 
@@ -147,7 +151,12 @@ def rows_from_cursor(cursor: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     ]
 
 
-def execute_ssrm_query(sources: list[str], request: dict[str, Any]) -> dict[str, Any]:
+def execute_ssrm_query(
+    sources: list[str],
+    request: dict[str, Any],
+    quack_token: str | None = None,
+    object_storage: ObjectStorageConfig | None = None,
+) -> dict[str, Any]:
     """Run a read-only user query after registering configured sources."""
     query = normalize_read_only_query(request.get("query", "SELECT 1"))
     start = int(request.get("startRow") or 0)
@@ -169,7 +178,12 @@ def execute_ssrm_query(sources: list[str], request: dict[str, Any]) -> dict[str,
 
     connection = duckdb.connect(database=":memory:")
     try:
-        configure_connection(connection, sources)
+        configure_connection(
+            connection,
+            sources,
+            quack_token=quack_token,
+            object_storage=object_storage,
+        )
         count_row = connection.execute(count_sql).fetchone()
         if count_row is None:
             raise HTTPException(status_code=500, detail="Count query returned no rows")

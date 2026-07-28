@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import uvicorn
 
 from openbb_duck.app import create_app
-from openbb_duck.discovery import source_specs
+from openbb_duck.discovery import ObjectStorageConfig, source_specs
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,8 @@ class CliConfig:
     port: int
     reload: bool
     cors_origins: list[str] | None
+    quack_token: str | None
+    object_storage: ObjectStorageConfig | None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  openbb-duck --source warehouse=./warehouse.duckdb\n"
             "  openbb-duck --source portfolio=sqlite:./portfolio.db\n"
             "  openbb-duck --source lake=ducklake:metadata.ducklake\n"
+            "  openbb-duck --source remote=quack:localhost\n"
             "  openbb-duck --source 's3://bucket/path/**/*.parquet'\n\n"
             "Rules:\n"
             "  --source is required and may be repeated. Globs are supported.\n"
@@ -92,6 +95,44 @@ def build_parser() -> argparse.ArgumentParser:
             "comma-separated."
         ),
     )
+    parser.add_argument(
+        "-q",
+        "--quack-token",
+        default=None,
+        help="Token for Quack remote sources. Env: OPENBB_DUCK_QUACK_TOKEN.",
+    )
+    parser.add_argument(
+        "--s3-endpoint",
+        default=None,
+        help="S3-compatible endpoint. Env: OPENBB_DUCK_S3_ENDPOINT.",
+    )
+    parser.add_argument(
+        "--s3-access-key-id",
+        default=None,
+        help="S3-compatible access key ID. Env: OPENBB_DUCK_S3_ACCESS_KEY_ID.",
+    )
+    parser.add_argument(
+        "--s3-secret-access-key",
+        default=None,
+        help=(
+            "S3-compatible secret access key. "
+            "Env: OPENBB_DUCK_S3_SECRET_ACCESS_KEY."
+        ),
+    )
+    parser.add_argument(
+        "--s3-region",
+        default=None,
+        help="S3-compatible region. Defaults to auto. Env: OPENBB_DUCK_S3_REGION.",
+    )
+    parser.add_argument(
+        "--s3-url-style",
+        default=None,
+        choices=("path", "vhost"),
+        help=(
+            "S3-compatible URL style. Defaults to path. "
+            "Env: OPENBB_DUCK_S3_URL_STYLE."
+        ),
+    )
     return parser
 
 
@@ -119,6 +160,8 @@ def resolve_config(
         cors_origins=args.cors_origins
         if args.cors_origins is not None
         else _env_csv(env, "OPENBB_DUCK_CORS_ORIGINS"),
+        quack_token=args.quack_token or env.get("OPENBB_DUCK_QUACK_TOKEN") or None,
+        object_storage=_object_storage_config(args, env),
     )
 
 
@@ -155,6 +198,33 @@ def _env_csv(environ: Mapping[str, str], name: str) -> list[str] | None:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
+def _object_storage_config(
+    args: argparse.Namespace,
+    environ: Mapping[str, str],
+) -> ObjectStorageConfig | None:
+    endpoint = args.s3_endpoint or environ.get("OPENBB_DUCK_S3_ENDPOINT")
+    access_key_id = args.s3_access_key_id or environ.get(
+        "OPENBB_DUCK_S3_ACCESS_KEY_ID"
+    )
+    secret_access_key = args.s3_secret_access_key or environ.get(
+        "OPENBB_DUCK_S3_SECRET_ACCESS_KEY"
+    )
+    if not endpoint and not access_key_id and not secret_access_key:
+        return None
+    if not endpoint or not access_key_id or not secret_access_key:
+        raise ValueError(
+            "OPENBB_DUCK_S3_ENDPOINT, OPENBB_DUCK_S3_ACCESS_KEY_ID, and "
+            "OPENBB_DUCK_S3_SECRET_ACCESS_KEY must be set together"
+        )
+    return ObjectStorageConfig(
+        endpoint=endpoint,
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key,
+        region=args.s3_region or environ.get("OPENBB_DUCK_S3_REGION", "auto"),
+        url_style=args.s3_url_style or environ.get("OPENBB_DUCK_S3_URL_STYLE", "path"),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse config, build the ASGI app, and hand it to uvicorn."""
     parser = build_parser()
@@ -164,6 +234,11 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
-    app = create_app(config.sources, cors_origins=config.cors_origins)
+    app = create_app(
+        config.sources,
+        cors_origins=config.cors_origins,
+        quack_token=config.quack_token,
+        object_storage=config.object_storage,
+    )
     uvicorn.run(app, host=config.host, port=config.port, reload=config.reload)
     return 0

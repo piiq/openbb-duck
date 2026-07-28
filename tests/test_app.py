@@ -1,11 +1,24 @@
 import sqlite3
+from typing import cast
 
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
 from openbb_duck.app import create_app
-from openbb_duck.discovery import configure_connection
+from openbb_duck.discovery import ObjectStorageConfig, configure_connection
+
+
+class RecordingConnection:
+    def __init__(self):
+        self.statements = []
+
+    def execute(self, statement, parameters=None):
+        self.statements.append((statement, parameters))
+        return self
+
+    def fetchall(self):
+        return []
 
 
 def write_csv(path):
@@ -169,6 +182,57 @@ def test_query_endpoint_accepts_file_and_attached_database_sources(tmp_path):
     assert sqlite_response.json()["rowData"] == [{"symbol": "AAPL"}]
     assert duckdb_response.status_code == 200
     assert duckdb_response.json()["rowData"] == [{"symbol": "MSFT"}]
+
+
+def test_quack_source_attaches_remote_catalog_with_token():
+    conn = RecordingConnection()
+
+    configure_connection(
+        cast(duckdb.DuckDBPyConnection, conn),
+        ["remote=quack:localhost:9494"],
+        quack_token="secret",
+    )
+
+    assert conn.statements[:3] == [
+        ("INSTALL quack", None),
+        ("LOAD quack", None),
+        (
+            "CREATE OR REPLACE SECRET openbb_duck_quack "
+            "(TYPE quack, TOKEN 'secret')",
+            None,
+        ),
+    ]
+    assert conn.statements[3] == (
+        "ATTACH 'quack:localhost:9494' AS \"remote\"",
+        None,
+    )
+
+
+def test_object_storage_config_creates_s3_secret_before_sources():
+    conn = RecordingConnection()
+
+    configure_connection(
+        cast(duckdb.DuckDBPyConnection, conn),
+        ["lake=s3://bucket/path/**/*.parquet"],
+        object_storage=ObjectStorageConfig(
+            endpoint="account.r2.cloudflarestorage.com",
+            access_key_id="key",
+            secret_access_key="secret",
+            region="auto",
+            url_style="path",
+        ),
+    )
+
+    assert conn.statements[:3] == [
+        ("INSTALL httpfs", None),
+        ("LOAD httpfs", None),
+        (
+            "CREATE OR REPLACE SECRET openbb_duck_s3 "
+            "(TYPE s3, KEY_ID 'key', SECRET 'secret', REGION 'auto', "
+            "ENDPOINT 'account.r2.cloudflarestorage.com', URL_STYLE 'path')",
+            None,
+        ),
+    ]
 
 
 def test_ambiguous_db_source_requires_explicit_prefix(tmp_path):

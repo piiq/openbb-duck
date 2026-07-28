@@ -89,6 +89,78 @@ def test_cli_retains_server_and_cors_config():
     assert config.cors_origins == ["https://workspace.example.com"]
 
 
+def test_cli_accepts_quack_token_from_env_and_argument():
+    env_config = resolve_config(
+        build_parser().parse_args(["--source", "remote=quack:localhost"]),
+        {"OPENBB_DUCK_QUACK_TOKEN": "env-secret"},
+    )
+    cli_config = resolve_config(
+        build_parser().parse_args(
+            [
+                "--source",
+                "remote=quack:localhost",
+                "--quack-token",
+                "cli-secret",
+            ]
+        ),
+        {"OPENBB_DUCK_QUACK_TOKEN": "env-secret"},
+    )
+
+    assert env_config.quack_token == "env-secret"
+    assert cli_config.quack_token == "cli-secret"
+
+
+def test_cli_accepts_object_storage_config_from_env():
+    config = resolve_config(
+        build_parser().parse_args(["--source", "lake=s3://bucket/**/*.parquet"]),
+        {
+            "OPENBB_DUCK_S3_ENDPOINT": "account.r2.cloudflarestorage.com",
+            "OPENBB_DUCK_S3_ACCESS_KEY_ID": "key",
+            "OPENBB_DUCK_S3_SECRET_ACCESS_KEY": "secret",
+        },
+    )
+
+    assert config.object_storage is not None
+    assert config.object_storage.endpoint == "account.r2.cloudflarestorage.com"
+    assert config.object_storage.access_key_id == "key"
+    assert config.object_storage.secret_access_key == "secret"
+    assert config.object_storage.region == "auto"
+    assert config.object_storage.url_style == "path"
+
+
+def test_cli_accepts_object_storage_config_from_arguments():
+    config = resolve_config(
+        build_parser().parse_args(
+            [
+                "--source",
+                "lake=s3://bucket/**/*.parquet",
+                "--s3-endpoint",
+                "account.r2.cloudflarestorage.com",
+                "--s3-access-key-id",
+                "cli-key",
+                "--s3-secret-access-key",
+                "cli-secret",
+                "--s3-region",
+                "weur",
+                "--s3-url-style",
+                "vhost",
+            ]
+        ),
+        {
+            "OPENBB_DUCK_S3_ENDPOINT": "env.example.com",
+            "OPENBB_DUCK_S3_ACCESS_KEY_ID": "env-key",
+            "OPENBB_DUCK_S3_SECRET_ACCESS_KEY": "env-secret",
+        },
+    )
+
+    assert config.object_storage is not None
+    assert config.object_storage.endpoint == "account.r2.cloudflarestorage.com"
+    assert config.object_storage.access_key_id == "cli-key"
+    assert config.object_storage.secret_access_key == "cli-secret"
+    assert config.object_storage.region == "weur"
+    assert config.object_storage.url_style == "vhost"
+
+
 def test_cli_help_explains_source_usage():
     help_text = build_parser().format_help()
 
@@ -96,3 +168,7 @@ def test_cli_help_explains_source_usage():
     assert "alias=source" in help_text
     assert "duckdb:./warehouse.db" in help_text
     assert "s3://bucket/path/**/*.parquet" in help_text
+    assert "quack:localhost" in help_text
+    assert "--s3-endpoint" in help_text
+    assert "--s3-access-key-id" in help_text
+    assert "--s3-secret-access-key" in help_text

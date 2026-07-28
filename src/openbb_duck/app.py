@@ -4,6 +4,7 @@ from fastapi import Body, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from openbb_duck.discovery import (
+    ObjectStorageConfig,
     quote_identifier,
     table_schemas,
 )
@@ -59,9 +60,17 @@ def widget_schema_name(schemas: dict) -> str:
     return ALL_SCHEMAS_NAME
 
 
-def widgets_json(sources: list[str]) -> dict:
+def widgets_json(
+    sources: list[str],
+    quack_token: str | None = None,
+    object_storage: ObjectStorageConfig | None = None,
+) -> dict:
     """Return the single SQL widget Terminal Pro loads from /widgets.json."""
-    schemas = table_schemas(sources)
+    schemas = table_schemas(
+        sources,
+        quack_token=quack_token,
+        object_storage=object_storage,
+    )
     return {
         "duck_sql": {
             "name": "DuckDB SQL",
@@ -90,6 +99,8 @@ def widgets_json(sources: list[str]) -> dict:
 def create_app(
     sources: list[str],
     cors_origins: list[str] | None = None,
+    quack_token: str | None = None,
+    object_storage: ObjectStorageConfig | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="OpenBB Duck",
@@ -113,7 +124,11 @@ def create_app(
 
     @app.get("/widgets.json")
     def get_widgets() -> dict:
-        return widgets_json(sources)
+        return widgets_json(
+            sources,
+            quack_token=quack_token,
+            object_storage=object_storage,
+        )
 
     @app.get("/apps.json")
     def get_apps() -> list[dict]:
@@ -141,7 +156,11 @@ def create_app(
 
     @app.get("/table-schemas")
     def get_table_schemas() -> dict:
-        return table_schemas(sources)
+        return table_schemas(
+            sources,
+            quack_token=quack_token,
+            object_storage=object_storage,
+        )
 
     @app.get("/semantic-views")
     def get_semantic_views() -> dict:
@@ -149,6 +168,11 @@ def create_app(
 
     @app.post("/query")
     def query(body: dict = Body(default_factory=dict)) -> dict:
-        return execute_ssrm_query(sources, body)
+        return execute_ssrm_query(
+            sources,
+            body,
+            quack_token=quack_token,
+            object_storage=object_storage,
+        )
 
     return app

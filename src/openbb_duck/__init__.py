@@ -1,3 +1,3 @@
-"""OpenBB Workspace backend for local DuckDB analytics."""
+"""OpenBB Workspace backend for DuckDB-readable data sources."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

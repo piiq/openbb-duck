@@ -104,8 +104,8 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(
         title="OpenBB Duck",
-        description="OpenBB Workspace backend for local DuckDB analytics.",
-        version="0.1.0",
+        description="OpenBB Workspace backend for DuckDB-readable data sources.",
+        version="0.2.0",
     )
 
     app.add_middleware(

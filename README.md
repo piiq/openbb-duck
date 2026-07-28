@@ -33,6 +33,7 @@ Since the `.db` extension is ambiguous, use `duckdb:./file.db` or `sqlite:./file
 
 Pass `--cors-origin` multiple times to replace the default OpenBB Workspace CORS allowlist.
 Pass `--quack-token` or `OPENBB_DUCK_QUACK_TOKEN` when Quack remote sources require token authentication.
+Quack support is experimental until DuckDB 2.0 and may change with DuckDB releases.
 For private S3-compatible object storage, set `OPENBB_DUCK_S3_ENDPOINT`, `OPENBB_DUCK_S3_ACCESS_KEY_ID`, and `OPENBB_DUCK_S3_SECRET_ACCESS_KEY`. `OPENBB_DUCK_S3_REGION` defaults to `auto`; `OPENBB_DUCK_S3_URL_STYLE` defaults to `path`.
 
 CLI options can also be configured with environment variables. Priority is CLI argument, then environment variable, then default.

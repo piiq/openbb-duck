@@ -205,7 +205,7 @@ def table_schemas(sources: list[str]) -> dict[str, dict[str, Any]]:
             full_name = f"{catalog}.{schema}.{table}"
             schemas[full_name] = table_schema
             if catalog == "memory" and schema == "main":
-                schemas[table] = table_schema
+                schemas[table] = table_schema | {"database": table, "schema": ""}
             if catalog == "memory" and schema == "information_schema":
                 schemas[f"{schema}.{table}"] = table_schema
         schemas.update(information_schema_schemas(connection))

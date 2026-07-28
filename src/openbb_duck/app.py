@@ -16,12 +16,32 @@ DEFAULT_CORS_ORIGINS = (
 )
 
 
-def default_query(sources: list[str]) -> str:
-    """Build the widget's initial query from registered non-system sources."""
-    for schema in table_schemas(sources).values():
+ALL_SCHEMAS_NAME = "ALL_DATABASES_ALL_SCHEMAS_ALL_TABLES"
+
+
+def queryable_schemas(schemas: dict) -> list[tuple[str, dict]]:
+    """Return one autocomplete entry per non-system table, preferring short names."""
+    entries: dict[tuple[str, str, str], tuple[str, dict]] = {}
+    for name, schema in schemas.items():
         if schema["schema"] == "information_schema":
             continue
-        if schema["database"] == "memory" and schema["schema"] == "main":
+        if schema["database"] == schema["tableName"] and schema["schema"] == "":
+            key = ("memory", "main", schema["tableName"])
+        else:
+            key = (schema["database"], schema["schema"], schema["tableName"])
+        if key not in entries or "." not in name:
+            entries[key] = (name, schema)
+    return list(entries.values())
+
+
+def default_query_from_schemas(schemas: dict) -> str:
+    """Build the widget's initial query from registered non-system sources."""
+    for _, schema in queryable_schemas(schemas):
+        if (
+            schema["database"] == "memory"
+            and schema["schema"] == "main"
+            or schema["schema"] == ""
+        ):
             return f"SELECT * FROM {quote_identifier(schema['tableName'])} LIMIT 100"
         return (
             f"SELECT * FROM {quote_identifier(schema['database'])}."
@@ -31,8 +51,17 @@ def default_query(sources: list[str]) -> str:
     raise ValueError("at least one queryable --source is required")
 
 
+def widget_schema_name(schemas: dict) -> str:
+    """Use exact table schema for one table so SQL column autocomplete works."""
+    queryable = queryable_schemas(schemas)
+    if len(queryable) == 1:
+        return queryable[0][0]
+    return ALL_SCHEMAS_NAME
+
+
 def widgets_json(sources: list[str]) -> dict:
     """Return the single SQL widget Terminal Pro loads from /widgets.json."""
+    schemas = table_schemas(sources)
     return {
         "duck_sql": {
             "name": "DuckDB SQL",
@@ -40,7 +69,7 @@ def widgets_json(sources: list[str]) -> dict:
             "category": "Local Data",
             "type": "ssrm_advanced",
             "endpoint": "query",
-            "schemaName": "ALL_DATABASES_ALL_SCHEMAS_ALL_TABLES",
+            "schemaName": widget_schema_name(schemas),
             "params": [
                 {
                     "paramName": "query",
@@ -49,7 +78,7 @@ def widgets_json(sources: list[str]) -> dict:
                     "label": "SQL Query",
                     "show": False,
                     "language": "sql",
-                    "value": default_query(sources),
+                    "value": default_query_from_schemas(schemas),
                 }
             ],
             "data": {"table": {"chartView": {"chartType": "column"}}},

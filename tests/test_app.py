@@ -44,12 +44,37 @@ def test_widgets_expose_source_backed_default_query(tmp_path):
     widgets = response.json()
     assert list(widgets) == ["duck_sql"]
     assert widgets["duck_sql"]["type"] == "ssrm_advanced"
-    assert widgets["duck_sql"]["schemaName"] == "ALL_DATABASES_ALL_SCHEMAS_ALL_TABLES"
+    assert widgets["duck_sql"]["schemaName"] == "prices"
     assert widgets["duck_sql"]["params"][0]["language"] == "sql"
     assert (
         widgets["duck_sql"]["params"][0]["value"]
         == 'SELECT * FROM "prices" LIMIT 100'
     )
+
+
+def test_single_source_widget_uses_table_schema_for_column_autocomplete(tmp_path):
+    csv_path = tmp_path / "prices.csv"
+    write_csv(csv_path)
+    client = TestClient(create_app([str(csv_path)]))
+
+    response = client.get("/widgets.json")
+
+    assert response.status_code == 200
+    assert response.json()["duck_sql"]["schemaName"] == "prices"
+
+
+def test_file_source_short_schema_exposes_table_as_top_level_completion(tmp_path):
+    csv_path = tmp_path / "prices.csv"
+    write_csv(csv_path)
+    client = TestClient(create_app([str(csv_path)]))
+
+    response = client.get("/table-schemas")
+
+    assert response.status_code == 200
+    schema = response.json()["prices"]
+    assert schema["database"] == "prices"
+    assert schema["schema"] == ""
+    assert schema["tableName"] == "prices"
 
 
 def test_table_schemas_include_file_sqlite_duckdb_and_information_schema(tmp_path):

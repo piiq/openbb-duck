@@ -18,6 +18,7 @@ class CliConfig:
     port: int
     reload: bool
     cors_origins: list[str] | None
+    api_token: str | None
     quack_token: str | None
     object_storage: ObjectStorageConfig | None
 
@@ -160,6 +161,7 @@ def resolve_config(
         cors_origins=args.cors_origins
         if args.cors_origins is not None
         else _env_csv(env, "OPENBB_DUCK_CORS_ORIGINS"),
+        api_token=env.get("OPENBB_DUCK_API_TOKEN") or None,
         quack_token=args.quack_token or env.get("OPENBB_DUCK_QUACK_TOKEN") or None,
         object_storage=_object_storage_config(args, env),
     )
@@ -237,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     app = create_app(
         config.sources,
         cors_origins=config.cors_origins,
+        api_token=config.api_token,
         quack_token=config.quack_token,
         object_storage=config.object_storage,
     )

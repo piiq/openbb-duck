@@ -1,6 +1,6 @@
 [project]
 name = "openbb-duck"
-version = "0.2.0"
+version = "0.2.1"
 description = "OpenBB Workspace backend for querying DuckDB-readable data sources"
 readme = "README.md"
 license = "MIT"

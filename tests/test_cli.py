@@ -110,6 +110,15 @@ def test_cli_accepts_quack_token_from_env_and_argument():
     assert cli_config.quack_token == "cli-secret"
 
 
+def test_cli_accepts_api_token_from_env():
+    config = resolve_config(
+        build_parser().parse_args(["--source", "./prices.parquet"]),
+        {"OPENBB_DUCK_API_TOKEN": "api-secret"},
+    )
+
+    assert config.api_token == "api-secret"
+
+
 def test_cli_accepts_object_storage_config_from_env():
     config = resolve_config(
         build_parser().parse_args(["--source", "lake=s3://bucket/**/*.parquet"]),

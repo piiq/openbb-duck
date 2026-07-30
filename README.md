@@ -32,6 +32,7 @@ Use `alias=source` for stable SQL names.
 Since the `.db` extension is ambiguous, use `duckdb:./file.db` or `sqlite:./file.db` to specify the type of the database.
 
 Pass `--cors-origin` multiple times to replace the default OpenBB Workspace CORS allowlist.
+Set `OPENBB_DUCK_API_TOKEN` to require that token as an HTTP bearer token on all API endpoints. Leave it unset to disable authentication. Configure the Workspace backend with an `Authorization: Bearer <token>` header.
 Pass `--quack-token` or `OPENBB_DUCK_QUACK_TOKEN` when Quack remote sources require token authentication.
 Quack support is experimental until DuckDB 2.0 and may change with DuckDB releases.
 For private S3-compatible object storage, set `OPENBB_DUCK_S3_ENDPOINT`, `OPENBB_DUCK_S3_ACCESS_KEY_ID`, and `OPENBB_DUCK_S3_SECRET_ACCESS_KEY`. `OPENBB_DUCK_S3_REGION` defaults to `auto`; `OPENBB_DUCK_S3_URL_STYLE` defaults to `path`.
@@ -45,6 +46,7 @@ CLI options can also be configured with environment variables. Priority is CLI a
 | `--port` | `OPENBB_DUCK_PORT` |
 | `--reload` / `--no-reload` | `OPENBB_DUCK_RELOAD` |
 | `--cors-origin` | `OPENBB_DUCK_CORS_ORIGINS` |
+| — | `OPENBB_DUCK_API_TOKEN` |
 | `--quack-token` | `OPENBB_DUCK_QUACK_TOKEN` |
 | `--s3-endpoint` | `OPENBB_DUCK_S3_ENDPOINT` |
 | `--s3-access-key-id` | `OPENBB_DUCK_S3_ACCESS_KEY_ID` |

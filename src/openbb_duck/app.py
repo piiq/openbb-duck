@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from fastapi import Body, FastAPI
+import secrets
+from typing import Annotated
+
+from fastapi import Body, Depends, FastAPI, HTTPException, Security, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from openbb_duck.discovery import (
     ObjectStorageConfig,
@@ -18,6 +22,7 @@ DEFAULT_CORS_ORIGINS = (
 
 
 ALL_SCHEMAS_NAME = "ALL_DATABASES_ALL_SCHEMAS_ALL_TABLES"
+BEARER_AUTH = HTTPBearer(auto_error=False)
 
 
 def queryable_schemas(schemas: dict) -> list[tuple[str, dict]]:
@@ -101,11 +106,29 @@ def create_app(
     cors_origins: list[str] | None = None,
     quack_token: str | None = None,
     object_storage: ObjectStorageConfig | None = None,
+    api_token: str | None = None,
 ) -> FastAPI:
+    def require_api_token(
+        credentials: Annotated[
+            HTTPAuthorizationCredentials | None,
+            Security(BEARER_AUTH),
+        ],
+    ) -> None:
+        if credentials is None or not secrets.compare_digest(
+            credentials.credentials,
+            api_token or "",
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or missing bearer token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     app = FastAPI(
         title="OpenBB Duck",
         description="OpenBB Workspace backend for DuckDB-readable data sources.",
-        version="0.2.0",
+        version="0.2.1",
+        dependencies=[Depends(require_api_token)] if api_token else None,
     )
 
     app.add_middleware(

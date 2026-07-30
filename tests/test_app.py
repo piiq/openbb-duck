@@ -338,3 +338,62 @@ def test_create_app_accepts_custom_cors_origins(tmp_path):
         response.headers["access-control-allow-origin"]
         == "https://workspace.example.com"
     )
+
+
+def test_api_is_public_without_api_token(tmp_path):
+    csv_path = tmp_path / "prices.csv"
+    write_csv(csv_path)
+    client = TestClient(create_app([f"prices={csv_path}"]))
+
+    response = client.get("/widgets.json")
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("headers", "status_code"),
+    [
+        ({}, 401),
+        ({"Authorization": "Bearer wrong-token"}, 401),
+        ({"Authorization": "Bearer test-token"}, 200),
+    ],
+)
+def test_api_token_requires_matching_bearer_token(tmp_path, headers, status_code):
+    csv_path = tmp_path / "prices.csv"
+    write_csv(csv_path)
+    client = TestClient(
+        create_app([f"prices={csv_path}"], api_token="test-token")
+    )
+
+    response = client.get("/widgets.json", headers=headers)
+
+    assert response.status_code == status_code
+    if status_code == 401:
+        assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_cors_preflight_does_not_require_api_token(tmp_path):
+    csv_path = tmp_path / "prices.csv"
+    write_csv(csv_path)
+    client = TestClient(
+        create_app(
+            [f"prices={csv_path}"],
+            cors_origins=["https://workspace.example.com"],
+            api_token="test-token",
+        )
+    )
+
+    response = client.options(
+        "/widgets.json",
+        headers={
+            "Origin": "https://workspace.example.com",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "Authorization",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "https://workspace.example.com"
+    )
